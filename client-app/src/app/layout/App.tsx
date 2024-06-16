@@ -1,26 +1,61 @@
 import {useEffect, useState } from 'react';
-import axios from 'axios';
 import { Container} from 'semantic-ui-react';
 import { Actitvity } from '../models/activity';
 import NavBar from './NavBar';
 import ActivityDashBoard from '../../features/activities/dashboard/ActivityDashBoard';
 import {v4 as uuid} from 'uuid';
+import agent from '../api/agent';
+import LoadingComponent from './loadingComponent';
+
 
 
 function App() {
   const[activities, setActivities] = useState<Actitvity[]>([]);
   const[selectActivity, setSelectActivity] = useState<Actitvity | undefined>(undefined);
   const[editMode, setEditMode] = useState(false);
+  const[loading, setLoading] = useState(true);
+  const[submitting, setSubmitting] = useState(false);
 
+  
+
+  // This useEffect hook is executed once when the component mounts.
+  // It fetches a list of activities from the server using the agent.Activities.list() method.
+  // The response is then processed and stored in the component's state using the setActivities() function.
   useEffect(() => {
-    axios.get<Actitvity[]>('http://localhost:5000/api/activities')
+    // Fetch a list of activities from the server
+    agent.Activities.list()
     .then(response => {
-      console.log(response);
-      setActivities(response.data);
+      // Create an empty array to store the activities
+      let actitvities: Actitvity[] = [];
+
+      // Iterate over each activity in the response
+      response.forEach(activity => {
+        // Extract only the date portion of the activity's date property
+        // and store it back in the activity's date property
+        activity.date = activity.date.split('T')[0];
+
+        // Add the activity to the activities array
+        actitvities.push(activity);
+      })
+
+      // Update the component's state with the activities array
+      setActivities(actitvities);
+      setLoading(false); 
     })
   }, [])
+
   
+  /**
+   * This function is called when a specific activity is selected.
+   * It searches through the list of activities stored in the component's state
+   * and finds the activity with the matching id.
+   * 
+   * @param {string} id - The id of the activity to find.
+   * @return {void} This function does not return anything.
+   */
   function handleSelectedActivity(id: string){
+    // Find the activity in the list of activities with the matching id
+    // and store it in the component's state.
     setSelectActivity(activities.find(x => x.id === id));
   }
 
@@ -36,15 +71,36 @@ function App() {
   }
 
   function handleCreateOrEditActivity(activity: Actitvity){
-    activity.id ? setActivities([...activities.filter(x => x.id !== activity.id), activity]) 
-    : setActivities([...activities, {...activity, id: uuid()}]);
-    setEditMode(false);
-    setSelectActivity(activity);
-  }
+    setSubmitting(true);
+    if(activity.id) {
+      agent.Activities.update(activity).then(() => {
+        setActivities([...activities.filter(x => x.id !== activity.id), activity])
+        setSelectActivity(activity);
+        setEditMode(false);
+        setSubmitting(false);
+      }) 
+      
+    } else {
+        activity.id = uuid();
+        agent.Activities.create(activity).then(() => {
+          setActivities([...activities, activity]);
+          setSelectActivity(activity);
+          setEditMode(false);
+          setSubmitting(false);
+        })
+      }
+    }
+    
 
   function handleDeleteActivity(id: string){
-    setActivities([...activities.filter(x => x.id !== id)]);
+    setSubmitting(true) 
+    agent.Activities.delete(id).then(() => {
+      setActivities([...activities.filter(x => x.id !== id)]);
+      setSubmitting(false);
+    })
   }
+
+  if(loading) return <LoadingComponent content='Loading...  '/>
 
   return (
    <>
@@ -60,8 +116,8 @@ function App() {
         closeForm = {handleFormClose}
         createOrEdit = {handleCreateOrEditActivity}
         deleteActivity = {handleDeleteActivity}
+        submitting = {submitting}
         />
-        
       </Container>
    </>
   )
